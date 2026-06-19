@@ -8,7 +8,8 @@ Usage:  python nldca_v8.py <COIN> <dollars> <band>
 CSV files (same directory, auto-selected by coin):
   BTC → hist.csv        timestamp,open,high,low,close   (Unix s/ms, comma-sep)
   ETH → eth.csv         Date,Open,High,Low,Close,...    (May 10 2026, $)
-  SOL → sol2.csv        Date,Price,Volume,Market_cap    (ISO, price-only → synthetic OHLC)                                                    XRP → hist2.csv       Date,Open,High,Low,Close,...    (May 10 2026, $)
+  SOL → sol2.csv        Date,Price,Volume,Market_cap    (ISO, price-only → synthetic OHLC)
+  XRP → hist2.csv       Date,Open,High,Low,Close,...    (May 10 2026, $)
 
 OLS4: log10(price) ~ log10(years_since_genesis)
   BTC: skip first 300 bars before fitting
@@ -39,7 +40,8 @@ try:
     from dotenv import load_dotenv; load_dotenv()
 except ImportError:
     pass
-                                                                      UTC = datetime.timezone.utc
+
+UTC = datetime.timezone.utc
 
 MEXC_KEY    = os.getenv("MEXC")
 MEXC_SECRET = os.getenv("MEXCSECRET")
@@ -60,7 +62,8 @@ COIN_CFG = {
     "XRP": {"csv":"hist2.csv", "binance":"XRPUSDT", "mexc":"XRP_USDT",
             "genesis":datetime.datetime(2012, 1, 2, 0, 0, 0,tzinfo=UTC), "ols_skip":0},
 }
-                                                                      LEVERAGE = 10
+
+LEVERAGE = 10
 SYMBOL=""; SYM=""; GENESIS=None; BAND=0.10; AMT_USD=10.0; OLS_SKIP=0; WND=0
 
 # ── http ──────────────────────────────────────────────────────────────────────
@@ -70,9 +73,11 @@ def _get(url):
 
 def _http(method, url, headers=None, data=None, params=None):
     if params:
-        url += "?" + urllib.parse.urlencode(sorted(params.items()))       req = urllib.request.Request(url, data=data, headers=headers or {}, method=method)
+        url += "?" + urllib.parse.urlencode(sorted(params.items()))
+    req = urllib.request.Request(url, data=data, headers=headers or {}, method=method)
     try:
-        with urllib.request.urlopen(req, timeout=10) as r:                        body = r.read()
+        with urllib.request.urlopen(req, timeout=10) as r:
+            body = r.read()
     except urllib.error.HTTPError as e:
         body = e.read()
     return json.loads(body) if body.strip() else {}
@@ -94,7 +99,8 @@ def mexc(method, endpoint, params=None, body=None):
                      params=params if method in ("GET","DELETE") else None)
     except Exception as e:
         log.error(f"mexc {method} {endpoint}: {e}"); return {}
-                                                                      # ── specs / sizing ────────────────────────────────────────────────────────────
+
+# ── specs / sizing ────────────────────────────────────────────────────────────
 def load_specs():
     rows = mexc("GET","/api/v1/contract/detail").get("data") or []
     for c in rows:
@@ -104,7 +110,8 @@ def load_specs():
         specs[s]={"p":p,"t":pu,"vu":vu,"cs":cs}
     log.info(f"specs: {len(specs)} contracts  {SYM}={specs.get(SYM)}")
 
-def _tick(): return specs.get(SYM,{}).get("t",0.5)                    def _prec(): return specs.get(SYM,{}).get("p",0)
+def _tick(): return specs.get(SYM,{}).get("t",0.5)
+def _prec(): return specs.get(SYM,{}).get("p",0)
 
 def _rfmt_price(v):
     t=_tick(); r=round(v/t)*t; s=f"{t:.10f}".rstrip("0")
@@ -160,7 +167,8 @@ def fetch_daily(start_ms, end_ms) -> List[Dict]:
     while cur < end_ms:
         batch=_get(f"{_bbase()}?symbol={SYMBOL}&interval=1d&startTime={cur}&endTime={end_ms}&limit=1000")
         if not batch: break
-        rows.extend(batch); cur=batch[-1][0]+1                                if len(batch)<1000: break
+        rows.extend(batch); cur=batch[-1][0]+1
+        if len(batch)<1000: break
     now=int(time.time()*1000)
     return [{"t":int(r[0]),"o":float(r[1]),"h":float(r[2]),"l":float(r[3]),"c":float(r[4])}
             for r in rows if int(r[0])+86_400_000<=now]
@@ -195,7 +203,8 @@ def _fetch_candles(interval: str, start_ms: int, bar_ms: int) -> List[Dict]:
         if len(batch)<1000: break
     return [{"t":int(r[0]),"o":float(r[1]),"h":float(r[2]),"l":float(r[3]),"c":float(r[4])}
             for r in rows if int(r[0])+bar_ms<=now]
-                                                                      def fetch_1h_last_month() -> List[Dict]:
+
+def fetch_1h_last_month() -> List[Dict]:
     now=int(time.time()*1000)
     return _fetch_candles("1h", now - 30*24*3600*1000, 3600*1000)
 
@@ -206,44 +215,55 @@ def fetch_1m_last_1h() -> List[Dict]:
 # ── CSV ───────────────────────────────────────────────────────────────────────
 def _num(s): return float(s.strip().replace("$","").replace(",","").replace(">","").split()[0])
 
-def _parse_dt(s) -> Optional[datetime.datetime]:                          s=s.strip().strip('"').rstrip(".")
+def _parse_dt(s) -> Optional[datetime.datetime]:
+    s=s.strip().strip('"').rstrip(".")
     try:
         v=float(s); ts=v/1000 if v>1e10 else v
         return datetime.datetime.fromtimestamp(ts,tz=UTC)
-    except ValueError: pass                                               for suffix in (" UTC+0"," UTC+00:00","Z"):
+    except ValueError: pass
+    for suffix in (" UTC+0"," UTC+00:00","Z"):
         if s.endswith(suffix): s=s[:-len(suffix)]; break
     for fmt in ("%Y-%m-%d %H:%M:%S","%Y-%m-%dT%H:%M:%S","%Y-%m-%d",
                 "%B %d %Y","%B %d, %Y","%b %d %Y","%b %d, %Y","%m/%d/%Y"):
         try: return datetime.datetime.strptime(s,fmt).replace(tzinfo=UTC)
         except ValueError: pass
     return None
-                                                                      def load_csv(path) -> List[Dict]:
+
+def load_csv(path) -> List[Dict]:
     rows=[]
     with open(path,newline="") as f:
         reader=csv.reader(f)
         header=[c.strip().strip('"').lower() for c in next(reader)]
-        has_ohlc="open" in header and "low" in header                         price_only="price" in header and "open" not in header
+        has_ohlc="open" in header and "low" in header
+        price_only="price" in header and "open" not in header
         for row in reader:
-            if not row or not row[0].strip(): continue                            try:
+            if not row or not row[0].strip(): continue
+            try:
                 dt=_parse_dt(row[0])
                 if dt is None: continue
                 if has_ohlc:
                     o,h,l,c=_num(row[1]),_num(row[2]),_num(row[3]),_num(row[4])
-                elif price_only:                                                          c=_num(row[1]); o=c*0.998; h=c*1.004; l=c*0.996
+                elif price_only:
+                    c=_num(row[1]); o=c*0.998; h=c*1.004; l=c*0.996
                 else: continue
             except (ValueError,IndexError): continue
-            if all(v>0 for v in (o,h,l,c)):                                           rows.append({"dt":dt,"t":int(dt.timestamp()*1000),"o":o,"h":h,"l":l,"c":c})
+            if all(v>0 for v in (o,h,l,c)):
+                rows.append({"dt":dt,"t":int(dt.timestamp()*1000),"o":o,"h":h,"l":l,"c":c})
     return rows
 
 # ── OLS4 ─────────────────────────────────────────────────────────────────────
 def _years(ts_ms) -> float:
     dt=datetime.datetime.fromtimestamp(ts_ms/1000,tz=UTC)
-    return (dt-GENESIS).total_seconds()/(365.25*24*3600)              
-def _log_years(ts_ms) -> Optional[float]:                                 y=_years(ts_ms); return math.log10(y) if y>0 else None
+    return (dt-GENESIS).total_seconds()/(365.25*24*3600)
 
-def _ols(x,y) -> Tuple[float,float]:                                      n=len(x); sx=sum(x); sy=sum(y)
+def _log_years(ts_ms) -> Optional[float]:
+    y=_years(ts_ms); return math.log10(y) if y>0 else None
+
+def _ols(x,y) -> Tuple[float,float]:
+    n=len(x); sx=sum(x); sy=sum(y)
     sxy=sum(x[i]*y[i] for i in range(n)); sx2=sum(x[i]**2 for i in range(n))
-    d=n*sx2-sx*sx                                                         if d==0: return 0.0,sy/n
+    d=n*sx2-sx*sx
+    if d==0: return 0.0,sy/n
     sl=(n*sxy-sx*sy)/d; return sl,(sy-sl*sx)/n
 
 def fit_ols4(bars) -> Tuple[float,float]:
@@ -254,18 +274,21 @@ def fit_ols4(bars) -> Tuple[float,float]:
             cx.append(lx); cy.append(math.log10(b["c"]))
     sl,ic=0.0,0.0
     for _ in range(4):
-        if len(cx)<2: break                                                   sl,ic=_ols(cx,cy)
+        if len(cx)<2: break
+        sl,ic=_ols(cx,cy)
         pred=[sl*x+ic for x in cx]
         order=sorted(range(len(cx)),key=lambda k:cy[k]-pred[k])
         keep=set(order[:max(1,len(order)//2)])
-        cx=[cx[k] for k in range(len(cx)) if k in keep]                       cy=[cy[k] for k in range(len(cy)) if k in keep]
+        cx=[cx[k] for k in range(len(cx)) if k in keep]
+        cy=[cy[k] for k in range(len(cy)) if k in keep]
     return sl,ic
 
 def ols_log_price(sl,ic,ts_ms) -> Optional[float]:
     lx=_log_years(ts_ms); return sl*lx+ic if lx is not None else None
 
 def ols_centre(sl,ic,ts_ms) -> float:
-    v=ols_log_price(sl,ic,ts_ms); return 10**v if v is not None else 0.0                                                                    
+    v=ols_log_price(sl,ic,ts_ms); return 10**v if v is not None else 0.0
+
 def in_band(sl,ic,ts_ms,price) -> bool:
     v=ols_log_price(sl,ic,ts_ms)
     return price>0 and v is not None and abs(math.log10(price)-v)<=BAND
@@ -274,29 +297,39 @@ def below_band(sl,ic,ts_ms,price) -> bool:
     v=ols_log_price(sl,ic,ts_ms)
     return price>0 and v is not None and math.log10(price)<v-BAND
 
-def find_anchor(bars, sl, ic) -> Optional[Dict]:                          """Most recent band-entry crossover: bar[i] low in-band, bar[i-1] low out-of-band."""
+def find_anchor(bars, sl, ic) -> Optional[Dict]:
+    """Most recent band-entry crossover: bar[i] low in-band, bar[i-1] low out-of-band."""
     for i in range(len(bars)-1, 0, -1):
         if in_band(sl, ic, bars[i]["t"], bars[i]["l"]) and \
            not in_band(sl, ic, bars[i-1]["t"], bars[i-1]["l"]):
-            return bars[i]                                                return None
+            return bars[i]
+    return None
 
 # ── SVG ───────────────────────────────────────────────────────────────────────
 def write_svg(all_bars, bars_1h, bars_1m, sl, ic, anchor_t, buys, coin,
-              pending_price=None, trigger_price=None, cycle_info=None):                                                                         """
-    Top panel:    1h candles, last 1 month        (full width)            Bottom-left:  1m candles, last 1h             (half width)
-    Bottom-right: 1d candles, since genesis       (half width)            trigger line + buy dots: bottom panels only
-    """                                                                   W=1200; H=760
-    ML=82; MR=24; MT=22                                                   PH=290; GAP=30
+              pending_price=None, trigger_price=None, cycle_info=None):
+    """
+    Top panel:    1h candles, last 1 month        (full width)
+    Bottom-left:  1m candles, last 1h             (half width)
+    Bottom-right: 1d candles, since genesis       (half width)
+    trigger line + buy dots: bottom panels only
+    """
+    W=1200; H=760
+    ML=82; MR=24; MT=22
+    PH=290; GAP=30
     cW=W-ML-MR
     # bottom half-widths (split at midpoint with a small gap)
-    BGAP=10                                                               HW=(cW-BGAP)//2   # each sub-panel pixel width
+    BGAP=10
+    HW=(cW-BGAP)//2   # each sub-panel pixel width
 
     # ── shared panel rendereshared panel renderer ────────────────────────────────────────────
-    def _panel(bars, y0, x0, pw, label,                                              show_trigger=False, show_buys=False):
+    def _panel(bars, y0, x0, pw, label,
+               show_trigger=False, show_buys=False):
         """Render one OHLC panel. x0/pw allow side-by-side sub-panels."""
         if len(bars)<2: return []
         lx_vals=[_log_years(b["t"]) for b in bars]
-        ly_c=[math.log10(b["c"]) if b["c"]>0 else None for b in bars]         ly_h=[math.log10(b["h"]) if b["h"]>0 else None for b in bars]
+        ly_c=[math.log10(b["c"]) if b["c"]>0 else None for b in bars]
+        ly_h=[math.log10(b["h"]) if b["h"]>0 else None for b in bars]
         ly_l=[math.log10(b["l"]) if b["l"]>0 else None for b in bars]
         ly_o=[math.log10(b["o"]) if b["o"]>0 else None for b in bars]
         ols_ly=[ols_log_price(sl,ic,b["t"]) for b in bars]
@@ -315,16 +348,21 @@ def write_svg(all_bars, bars_1h, bars_1m, sl, ic, anchor_t, buys, coin,
         pad_log=PAD/PH*raw_yrng
         ymn=raw_ymn-pad_log; ymx=raw_ymx+pad_log; yrng=ymx-ymn
         x1=x0+pw
-                                                                              def xp(lx): return x0+(lx-xmn)/xrng*pw if lx is not None else None
+
+        def xp(lx): return x0+(lx-xmn)/xrng*pw if lx is not None else None
         def yp(ly): return y0+PH-(ly-ymn)/yrng*PH if ly is not None else None
-        def yclip(y):                                                             if y is None: return None
+        def yclip(y):
+            if y is None: return None
             return max(y0, min(y0+PH, y))
 
         out=[]
-        out.append(f'<rect x="{x0}" y="{y0}" width="{pw}" height="{PH}" '                                                                                      f'fill="#f8f9fa" stroke="#bbb" stroke-width="1"/>')
+        out.append(f'<rect x="{x0}" y="{y0}" width="{pw}" height="{PH}" '
+                   f'fill="#f8f9fa" stroke="#bbb" stroke-width="1"/>')
         out.append(f'<text x="{x0+6}" y="{y0+15}" font-family="Courier New" '
-                   f'font-size="10" fill="#444">{label}</text>')      
-        # price grid lines + labels (only on left edge of each panel)         for d in range(int(math.floor(ymn)), int(math.ceil(ymx))+1):
+                   f'font-size="10" fill="#444">{label}</text>')
+
+        # price grid lines + labels (only on left edge of each panel)
+        for d in range(int(math.floor(ymn)), int(math.ceil(ymx))+1):
             y=yp(float(d))
             if y is not None and y0<=y<=y0+PH:
                 out.append(f'<line x1="{x0}" x2="{x1}" y1="{y:.1f}" y2="{y:.1f}" '
@@ -338,12 +376,17 @@ def write_svg(all_bars, bars_1h, bars_1m, sl, ic, anchor_t, buys, coin,
             lx=math.log10(yr)
             if lx<xmn or lx>xmx: continue
             x=xp(lx)
-            out.append(f'<line x1="{x:.1f}" y1="{y0}" x2="{x:.1f}" y2="{y0+PH}" '                                                                                  f'stroke="#e8e8e8" stroke-width="0.6"/>')
-            out.append(f'<text x="{x:.1f}" y="{y0+PH+13}" text-anchor="middle" '                                                                                   f'font-family="Courier New" font-size="8" fill="#888">{yr}yr</text>')
-                                                                              # band polygon — only render if band interval intersects price y range
-        hi_pts=[(xp(lx_vals[i]), yp(bhi_ly[i])) for i in range(len(bars))                                                                                   if lx_vals[i] is not None and bhi_ly[i] is not None]
+            out.append(f'<line x1="{x:.1f}" y1="{y0}" x2="{x:.1f}" y2="{y0+PH}" '
+                       f'stroke="#e8e8e8" stroke-width="0.6"/>')
+            out.append(f'<text x="{x:.1f}" y="{y0+PH+13}" text-anchor="middle" '
+                       f'font-family="Courier New" font-size="8" fill="#888">{yr}yr</text>')
+
+        # band polygon — only render if band interval intersects price y range
+        hi_pts=[(xp(lx_vals[i]), yp(bhi_ly[i])) for i in range(len(bars))
+                if lx_vals[i] is not None and bhi_ly[i] is not None]
         lo_pts=[(xp(lx_vals[i]), yp(blo_ly[i])) for i in range(len(bars))
-                if lx_vals[i] is not None and blo_ly[i] is not None]          # interval intersection: band [min(blo), max(bhi)] must overlap [ymn, ymx]
+                if lx_vals[i] is not None and blo_ly[i] is not None]
+        # interval intersection: band [min(blo), max(bhi)] must overlap [ymn, ymx]
         bhi_vals=[v for v in bhi_ly if v is not None]
         blo_vals=[v for v in blo_ly if v is not None]
         band_overlaps=(bhi_vals and blo_vals and
@@ -434,7 +477,8 @@ def write_svg(all_bars, bars_1h, bars_1m, sl, ic, anchor_t, buys, coin,
 
     # ── assemble SVG ─────────────────────────────────────────────────────
     now_str=datetime.datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
-    anc_str=(datetime.datetime.fromtimestamp(anchor_t/1000,tz=UTC).strftime("%Y-%m-%d")                                                                  if anchor_t else "none")
+    anc_str=(datetime.datetime.fromtimestamp(anchor_t/1000,tz=UTC).strftime("%Y-%m-%d")
+             if anchor_t else "none")
     pending_str=f"  PENDING@{pending_price:,.4f}" if pending_price else ""
     if cycle_info:
         ci=cycle_info
@@ -456,7 +500,8 @@ def write_svg(all_bars, bars_1h, bars_1m, sl, ic, anchor_t, buys, coin,
         f'font-size="11" fill="#333" font-weight="bold">'
         f'{coin} NLDCA  {now_str}  buys={len(buys)}{pending_str}{cycle_str}</text>',
     ]
-                                                                          y_top = MT+6
+
+    y_top = MT+6
     y_bot = MT+6+PH+GAP
 
     # Top: 1h last month (full width, OLS band bounds)
@@ -476,7 +521,8 @@ def write_svg(all_bars, bars_1h, bars_1m, sl, ic, anchor_t, buys, coin,
 
     # legend
     lx2=ML; ly2=H-14
-    for lc,ld,lt in [("#1a8a1a","none","up"),("#aa1111","none","down"),                                                                                          ("#e74c3c","none","OLS"),("#f5c518","4,3","±band"),
+    for lc,ld,lt in [("#1a8a1a","none","up"),("#aa1111","none","down"),
+                     ("#e74c3c","none","OLS"),("#f5c518","4,3","±band"),
                      ("#999","3,3","anchor"),("#f5a623","3,2","limit"),
                      ("#27ae60","6,4","ATL")]:
         dash=f' stroke-dasharray="{ld}"' if ld!="none" else ""
@@ -485,7 +531,8 @@ def write_svg(all_bars, bars_1h, bars_1m, sl, ic, anchor_t, buys, coin,
         svg.append(f'<text x="{lx2+17}" y="{ly2+4}" font-family="Courier New" '
                    f'font-size="8" fill="{lc}">{lt}</text>')
         lx2+=72
-    svg.append(f'<circle cx="{lx2+4}" cy="{ly2}" r="3" fill="#f5a623" '                                                                                    f'stroke="#333" stroke-width="0.8"/>')
+    svg.append(f'<circle cx="{lx2+4}" cy="{ly2}" r="3" fill="#f5a623" '
+               f'stroke="#333" stroke-width="0.8"/>')
     svg.append(f'<text x="{lx2+11}" y="{ly2+4}" font-family="Courier New" '
                f'font-size="8" fill="#333">buy</text>')
     svg.append("</svg>")
@@ -566,7 +613,8 @@ def main():
     old_atl = _atl_since(all_bars, anchor_t)
     wnd_str = f"{WND}d" if WND > 0 else "since-entry"
     log.info(f"anchor={_date(anchor_t)}  old_atl={old_atl:.4f}  lookback={wnd_str}")
-                                                                          buys: List[Dict]=[]
+
+    buys: List[Dict]=[]
     pending_oid: Optional[str]=None
     pending_price: Optional[float]=None
 
@@ -574,18 +622,24 @@ def main():
     # Accumulates leftover USD when an order is skipped (below min size).
     # On fill, resets to AMT_USD. On skip, adds AMT_USD for next trigger.
     carry_usd: float = AMT_USD
-                                                                          new_atl_count: int = 0   # total new-ATL triggers this session
-                                                                          bars_1h=fetch_1h_last_month()
+
+    new_atl_count: int = 0   # total new-ATL triggers this session
+
+    bars_1h=fetch_1h_last_month()
     bars_1m=fetch_1m_last_1h()
-    write_svg(all_bars, bars_1h, bars_1m, sl, ic, anchor_t, buys, coin, trigger_price=old_atl)                                              
-    last_bar_date=_date(all_bars[-1]["t"])                                cycle=0
-                                                                          while True:
+    write_svg(all_bars, bars_1h, bars_1m, sl, ic, anchor_t, buys, coin, trigger_price=old_atl)
+
+    last_bar_date=_date(all_bars[-1]["t"])
+    cycle=0
+
+    while True:
         now=time.time(); wake=(int(now)//60+1)*60+1
         time.sleep(max(0,wake-now))
         cycle+=1
         try:
             now_ms=int(time.time()*1000)
-            bars_1h=fetch_1h_last_month()                                         bars_1m=fetch_1m_last_1h()
+            bars_1h=fetch_1h_last_month()
+            bars_1m=fetch_1m_last_1h()
 
             # ── if order pending, check fill ──────────────────────────────────
             if pending_oid is not None:
@@ -600,33 +654,57 @@ def main():
                     log.info(f"[{cycle}] waiting for fill  id={pending_oid} @ {pending_price:.4f}  mark={mark:.4f}")
                     write_svg(all_bars, bars_1h, bars_1m, sl, ic, anchor_t, buys, coin,
                              pending_price=pending_price, trigger_price=old_atl,
-                             cycle_info={"symbol":SYM,"price":mark,"atl":old_atl,                                                                                                    "new_atl":False,"new_atl_count":new_atl_count})                                                                        continue
-                                                                                  # ── normal cycle ──────────────────────────────────────────────────                                                                        bar = fetch_current_daily()
-            low = bar["l"]                                                        bar_date = _date(bar["t"])
+                             cycle_info={"symbol":SYM,"price":mark,"atl":old_atl,
+                                         "new_atl":False,"new_atl_count":new_atl_count})
+                    continue
+
+            # ── normal cycle ──────────────────────────────────────────────────
+            bar = fetch_current_daily()
+            low = bar["l"]
+            bar_date = _date(bar["t"])
             ols_c = ols_centre(sl, ic, now_ms)
             mark = get_mark()
             new_day = bar_date > last_bar_date
             is_new_atl = False
 
             if new_day:
-                last_bar_date = bar_date                                              by_day[bar_date] = bar
-                all_bars = sorted(by_day.values(), key=lambda b: b["t"])                                                                                    # Re-detect anchor on each new day (crossover may have shifted)
-                new_anchor = find_anchor(all_bars, sl, ic)                            if new_anchor and new_anchor["t"] != anchor_t:
-                    anchor_t = new_anchor["t"]                                            old_atl = _atl_since(all_bars, anchor_t)
-                    log.info(f"[{cycle}] new anchor crossover  {_date(anchor_t)}  atl={old_atl:.4f}")                                       
+                last_bar_date = bar_date
+                by_day[bar_date] = bar
+                all_bars = sorted(by_day.values(), key=lambda b: b["t"])
+                # Re-detect anchor on each new day (crossover may have shifted)
+                new_anchor = find_anchor(all_bars, sl, ic)
+                if new_anchor and new_anchor["t"] != anchor_t:
+                    anchor_t = new_anchor["t"]
+                    old_atl = _atl_since(all_bars, anchor_t)
+                    log.info(f"[{cycle}] new anchor crossover  {_date(anchor_t)}  atl={old_atl:.4f}")
+
             # Check trigger
             if low < old_atl:
-                is_new_atl = True                                                     new_atl_count += 1                                                    log.info(f"[{cycle}] {SYM}  price={mark:.4f}  ATL={low:.4f}  newATL=✓  newATL#={new_atl_count}"                                                      f"  carry_usd={carry_usd:.2f}")                              oid = place_buy(low, mark, carry_usd)                                 if oid == "SKIP":
+                is_new_atl = True
+                new_atl_count += 1
+                log.info(f"[{cycle}] {SYM}  price={mark:.4f}  ATL={low:.4f}  newATL=✓  newATL#={new_atl_count}"
+                         f"  carry_usd={carry_usd:.2f}")
+                oid = place_buy(low, mark, carry_usd)
+                if oid == "SKIP":
                     # Below minimum — accumulate carry for next trigger
-                    carry_usd += AMT_USD                                                  log.info(f"[{cycle}] carry_usd now {carry_usd:.2f}")
-                elif oid is not None:                                                     pending_oid = oid
+                    carry_usd += AMT_USD
+                    log.info(f"[{cycle}] carry_usd now {carry_usd:.2f}")
+                elif oid is not None:
+                    pending_oid = oid
                     pending_price = low
                     # carry_usd stays until fill confirms; reset on fill
-                # Update ATL regardless of order outcome                              old_atl = low
-            else:                                                                     log.info(f"[{cycle}] {SYM}  price={mark:.4f}  ATL={old_atl:.4f}  newATL=×  newATL#={new_atl_count}")                        
+                # Update ATL regardless of order outcome
+                old_atl = low
+            else:
+                log.info(f"[{cycle}] {SYM}  price={mark:.4f}  ATL={old_atl:.4f}  newATL=×  newATL#={new_atl_count}")
+
             write_svg(all_bars, bars_1h, bars_1m, sl, ic, anchor_t, buys, coin,
                      pending_price=pending_price, trigger_price=old_atl,
-                     cycle_info={"symbol":SYM,"price":mark,"atl":old_atl,                                                                                                    "new_atl":is_new_atl,"new_atl_count":new_atl_count})
+                     cycle_info={"symbol":SYM,"price":mark,"atl":old_atl,
+                                 "new_atl":is_new_atl,"new_atl_count":new_atl_count})
 
         except Exception as e:
-            log.warning(f"[{cycle}] {e}", exc_info=True)                                                                                    if __name__=="__main__":                                                  main()
+            log.warning(f"[{cycle}] {e}", exc_info=True)
+
+if __name__=="__main__":
+    main()
