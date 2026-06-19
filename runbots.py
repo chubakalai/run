@@ -1,8 +1,9 @@
-
 import subprocess
 import os
-import sys                                                            import signal
-                                                                      # Define bot configurations
+import sys
+import signal
+
+# Define bot configurations
 bots = [
     {"symbol": "BTC", "interval": 12, "threshold": 0.15, "lev": 50, "wnd": 10},
     {"symbol": "ETH", "interval": 12, "threshold": 0.20, "lev": 30, "wnd": 10},
@@ -22,7 +23,7 @@ for bot in bots:
         "--lev", str(bot["lev"]),
         "--wnd", str(bot["wnd"])
     ]
-
+    
     # Start process WITHOUT waiting (true background)
     process = subprocess.Popen(
         cmd,
