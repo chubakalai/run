@@ -2,6 +2,7 @@ import subprocess
 import os
 import sys
 import signal
+import time
 
 # Define bot configurations
 bots = [
@@ -13,7 +14,18 @@ bots = [
 
 processes = []
 
-# Start each bot in the background
+def cleanup(signum, frame):
+    """Kill all bots on exit"""
+    print("\nShutting down bots...")
+    for symbol, process in processes:
+        process.kill()
+    sys.exit(0)
+
+# Handle graceful shutdown
+signal.signal(signal.SIGINT, cleanup)
+signal.signal(signal.SIGTERM, cleanup)
+
+# Start each bot
 for bot in bots:
     cmd = [
         "python", "bfbot926.py",
@@ -24,14 +36,19 @@ for bot in bots:
         "--wnd", str(bot["wnd"])
     ]
     
-    # Start process WITHOUT waiting (true background)
     process = subprocess.Popen(
         cmd,
-        stdout=subprocess.DEVNULL,  # or use subprocess.PIPE if you want output
-        stderr=subprocess.DEVNULL,
-        start_new_session=True      # Detach from parent process
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
     )
     processes.append((bot["symbol"], process))
     print(f"Started {bot['symbol']} bot (PID: {process.pid})")
 
-print(f"\n{len(processes)} bots running in background. Script exiting...")
+print(f"\n{len(processes)} bots running. Monitoring...")
+
+# Keep the main process alive
+try:
+    while True:
+        time.sleep(60)
+except KeyboardInterrupt:
+    cleanup(None, None)
