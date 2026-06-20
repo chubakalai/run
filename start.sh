@@ -1,19 +1,32 @@
 #!/bin/bash
 set -e
 
-echo "=== Starting BF Bot ==="
+echo "=== Starting BF Bots ==="
 python bfbot926.py BTC 12 0.15 --lev 50 --wnd 10 &
-BOT_PID=$!
-echo "Bot started (PID: $BOT_PID)"
+PIDS=($!)
+echo "BTC bot started (PID: ${PIDS[0]})"
+
+python bfbot926.py ETH 12 0.20 --lev 30 --wnd 10 &
+PIDS+=($!)
+echo "ETH bot started (PID: ${PIDS[1]})"
+
+python bfbot926.py XRP 12 0.20 --lev 30 --wnd 10 &
+PIDS+=($!)
+echo "XRP bot started (PID: ${PIDS[2]})"
+
+python bfbot926.py SOL 12 0.20 --lev 30 --wnd 10 &
+PIDS+=($!)
+echo "SOL bot started (PID: ${PIDS[3]})"
 
 echo "=== Starting Web Server ==="
-# Serve nldca3.html on port 8080 (Fly.io default)
 python -m http.server 8080 &
-WEB_PID=$!
-echo "Web server started (PID: $WEB_PID)"
+PIDS+=($!)
+echo "Web server started (PID: ${PIDS[4]})"
 
-# Keep container alive; exit if either process dies
+echo "All 5 processes running. Watching..."
+
+# Exit container if ANY process dies
 wait -n
-echo "A process exited — shutting down"
-kill $BOT_PID $WEB_PID 2>/dev/null
+echo "A process exited unexpectedly — shutting down all"
+kill "${PIDS[@]}" 2>/dev/null
 exit 1
