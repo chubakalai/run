@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NLDCA</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a1a;display:flex;flex-direction:column;align-items:center;padding:10px;font-family:Courier New,monospace}
+#time{color:#888;font-size:14px;margin-bottom:8px;letter-spacing:1px}
+#tabs{display:flex;gap:0;margin-bottom:6px}
+.tab{background:#2a2a2a;color:#888;border:1px solid #444;padding:6px 28px;cursor:pointer;font-family:Courier New,monospace;font-size:14px;transition:background .15s,color .15s}
+.tab:first-child{border-radius:4px 0 0 4px}
+.tab:last-child{border-radius:0 4px 4px 0}
+.tab:hover{background:#3a3a3a}
+.tab.active{background:#f5a623;color:#1a1a1a;border-color:#f5a623;font-weight:bold}
+#frame{width:960px;height:680px;overflow:hidden;position:relative}
+#frame object{width:960px;height:680px;position:absolute;top:0;left:0;opacity:0;transition:opacity .15s}
+#frame object.active{opacity:1}
+</style>
+</head>
+<body>
+<div id="time"></div>
+<div id="tabs"></div>
+<div id="frame"></div>
+<script>
+const COINS=['BTC','ETH','SOL','XRP'];
+let idx=0;
+let ts=Date.now();
+
+function buildTabs(){
+let container=document.getElementById('tabs');
+COINS.forEach((c,i)=>{
+let t=document.createElement('div');
+t.className='tab';
+t.textContent=c;
+t.onclick=()=>{idx=i;refresh()};
+t.id='tab'+c;
+container.appendChild(t);
+});
+}
+
+function loadAll(){
+COINS.forEach(c=>{
+let o=document.createElement('object');
+o.data=c+'.svg?v='+ts;
+o.type='image/svg+xml';
+o.id='obj'+c;
+document.getElementById('frame').appendChild(o);
+});
+refresh();
+}
+
+function refresh(){
+COINS.forEach((c,i)=>{
+document.getElementById('obj'+c).classList.toggle('active',i===idx);
+document.getElementById('tab'+c).classList.toggle('active',i===idx);
+});
+}
+
+function reloadAll(){
+ts=Date.now();
+let frame=document.getElementById('frame');
+frame.innerHTML='';
+COINS.forEach(c=>{
+let o=document.createElement('object');
+o.data=c+'.svg?v='+ts;
+o.type='image/svg+xml';
+o.id='obj'+c;
+frame.appendChild(o);
+});
+refresh();
+}
+
+function tick(){
+let d=new Date();
+document.getElementById('time').textContent=
+d.getHours().toString().padStart(2,'0')+':'+
+d.getMinutes().toString().padStart(2,'0')+':'+
+d.getSeconds().toString().padStart(2,'0');
+}
+
+function scheduleNext(){
+let now=new Date();
+let ms=now.getMilliseconds();
+let s=now.getSeconds();
+let next=((59-s)+5)*1000+(1000-ms);
+setTimeout(()=>{
+tick();
+reloadAll();
+setInterval(()=>{tick();reloadAll()},60000);
+},next);
+}
+
+buildTabs();
+tick();
+loadAll();
+scheduleNext();
+</script>
+</body>
+</html>
