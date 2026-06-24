@@ -2,19 +2,19 @@
 set -e
 
 echo "=== Starting BF Bots ==="
-python bfbot926.py BTC 12 0.15 --lev 50 --wnd 10 &
+python bfbot927.py BTC 12 0.15 --lev 50 --wnd 10 &
 PIDS=($!)
 echo "BTC bot started (PID: ${PIDS[0]})"
 
-python bfbot926.py ETH 12 0.20 --lev 30 --wnd 10 &
+python bfbot927.py ETH 12 0.20 --lev 30 --wnd 10 &
 PIDS+=($!)
 echo "ETH bot started (PID: ${PIDS[1]})"
 
-python bfbot926.py XRP 12 0.20 --lev 30 --wnd 10 &
+python bfbot927.py XRP 12 0.20 --lev 30 --wnd 10 &
 PIDS+=($!)
 echo "XRP bot started (PID: ${PIDS[2]})"
 
-python bfbot926.py SOL 12 0.20 --lev 30 --wnd 10 &
+python bfbot927.py SOL 12 0.20 --lev 30 --wnd 10 &
 PIDS+=($!)
 echo "SOL bot started (PID: ${PIDS[3]})"
 
