@@ -32,7 +32,7 @@ SVG (Coin.svg, atomic write):
   Bottom: last 240m of 1m candles — log10(price) vs log10(years)
 """
 
-import csv, datetime, hashlib, hmac, json, logging, math, os, sys, time
+import csv, datetime, fcntl, hashlib, hmac, json, logging, math, os, sys, time
 import urllib.error, urllib.parse, urllib.request
 from typing import Dict, List, Optional, Tuple
 
@@ -65,6 +65,15 @@ COIN_CFG = {
 
 LEVERAGE = 10
 SYMBOL=""; SYM=""; GENESIS=None; BAND=0.10; AMT_USD=10.0; OLS_SKIP=0; WND=0
+
+# ── lockfile ──────────────────────────────────────────────────────────────────
+def _acquire_lock(coin):
+    lf = open(f".{coin}.lock", "w")
+    try:
+        fcntl.flock(lf, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        log.error(f"Another instance already running for {coin} — exiting"); sys.exit(1)
+    return lf  # keep reference alive to hold the lock
 
 # ── http ──────────────────────────────────────────────────────────────────────
 def _get(url):
@@ -176,7 +185,7 @@ def fetch_daily(start_ms, end_ms) -> List[Dict]:
 def fetch_current_daily() -> Dict:
     """Returns current daily bar (incomplete) with intraday low."""
     batch = _get(f"{_bbase()}?symbol={SYMBOL}&interval=1d&limit=2")
-    raw = batch[-1]  # most recent bar - may be incomplete
+    raw = batch[-1]
     return {"t": int(raw[0]), "o": float(raw[1]), "h": float(raw[2]),
             "l": float(raw[3]), "c": float(raw[4])}
 
@@ -552,6 +561,9 @@ def main():
     if not MEXC_KEY or not MEXC_SECRET:
         log.error("MEXC / MEXCSECRET not set"); sys.exit(1)
 
+    # ── single-instance lockfile ──────────────────────────────────────────────
+    _lock = _acquire_lock(coin)
+
     load_specs()
     if SYM not in specs:
         log.error(f"{SYM} not in MEXC specs"); sys.exit(1)
@@ -577,7 +589,7 @@ def main():
     log.info(f"OLS4  slope={sl:.4f}  intercept={ic:.4f}  skip={OLS_SKIP}")
 
     def _atl_since(bars, anchor_t):
-        """Min low of last WND days (rolling), or since anchor if WND=0."""
+        """Min low of last WND days (rolling from now), or since anchor if WND=0."""
         if WND > 0:
             cutoff = int(time.time() * 1000) - WND * 86_400_000
             lookback = [b for b in bars if b["t"] >= cutoff]
@@ -666,6 +678,10 @@ def main():
                 elif oid is not None:
                     pending_oid = oid
                     pending_price = low
+
+                # Ratchet guard: update old_atl immediately so the same low
+                # cannot re-trigger on the next cycle before pending_oid blocks it.
+                old_atl = low
             else:
                 log.info(f"[{cycle}] {SYM}  price={mark:.4f}  ATL={old_atl:.4f}  newATL=×  newATL#={new_atl_count}")
 
